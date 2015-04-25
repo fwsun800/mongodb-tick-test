@@ -43,51 +43,48 @@ function tick() {
       if (err)
         console.log(err);
     });
-
-  setTimeout(function() {
-      tick();
-    }, parseInt(Math.random()*10));
+  setTimeout(tick, 1);
 }
 
-process.on('SIGINT', function() {
-  console.log('feed stopped');
-  process.exit();
-});
+var cluster = require('cluster');
+var numCPUs = require('os').cpus().length;
 
-console.log("Connecting to " + host + ":" + port + "...");
-Db.connect(format("mongodb://%s:%s/test?w=1", host, port), function(err, db) {
-  if (err)
-    console.log(err);
-
-  console.log("Dropping collection ticks...");
-  db.dropCollection('ticks', function(err, result) {
-    if (err)
-      console.log(err);
-
-    console.log("ticks collection dropped");
+if (cluster.isMaster) {
+  for (var i=0; i < numCPUs; i++) {
+    console.log('Forking Worker ' + i + '...');
+    cluster.fork();
+  }
+}
+else {
+  process.on('SIGINT', function() {
+    console.log('Worker ' + process.pid + ' stopped');
+    process.exit();
   });
 
-  console.log("Creating collection ticks...");
-  ticks = db.collection('ticks');
-  console.log("ticks collection created");
-  
-  ticks.createIndex([['all'], ['_id', 1], ['ts', 1], ['s', 1], ['p', 1]], function(err, indexName) {
+  console.log("Connecting to " + host + ":" + port + "...");
+  Db.connect(format("mongodb://%s:%s/test?w=1", host, port), function(err, db) {
     if (err)
       console.log(err);
 
-    console.log("created index: " + indexName);
-
-    ticks.indexInformation(function(err, doc) {
+    ticks = db.collection('ticks');
+    console.log("ticks collection created");
+    
+    ticks.createIndex([['all'], ['_id', 1], ['ts', 1], ['s', 1], ['p', 1]], function(err, indexName) {
       if (err)
         console.log(err);
-  
-      console.log("Generating ticks...");
 
-      setInterval(tick, INTERVAL);
+      console.log("created index: " + indexName);
+
+      ticks.indexInformation(function(err, doc) {
+        if (err)
+          console.log(err);
+    
+        console.log("Generating ticks...");
+      });
     });
 
+    setInterval(tick, INTERVAL);
   });
-});
-
+}
 
 
